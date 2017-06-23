@@ -848,7 +848,7 @@ def create_from_kafka_message(
         key=kafka_message.key,
     )
     return _create_message_from_packed_message(
-        packed_message=kafka_message,
+        packed_message=kafka_message.value,
         envelope=envelope or Envelope(),
         force_payload_decoding=force_payload_decoding,
         kafka_position_info=kafka_position_info,
@@ -885,9 +885,48 @@ def create_from_offset_and_message(
         The message object
     """
     return _create_message_from_packed_message(
-        packed_message=offset_and_message.message,
+        packed_message=offset_and_message.message.value,
         envelope=envelope or Envelope(),
         force_payload_decoding=force_payload_decoding,
+        reader_schema_id=reader_schema_id
+    )
+
+
+def create_message_from_kafka_message_value(
+    message_value,
+    envelope=None,
+    force_payload_decoding=True,
+    kafka_position_info=None,
+    reader_schema_id=None
+):
+    """ Builds a data_pipeline.message.Message from a kafka message value.
+    If no reader schema id is provided, the schema used for encoding will be
+    used for decoding.
+
+    Args:
+        payload (yelp_kafka.consumer.Message.value or kafka.common.KafkaMessage.value):
+            The value of the kafka message with payload, uuid and schema_id
+        envelope (Optional[:class:data_pipeline.envelope.Envelope]): Envelope
+            instance that unpacks the data pipeline messages.
+        force_payload_decoding (Optional[boolean]): If this is set to `True` then
+            we will decode the payload/previous_payload immediately.
+            Otherwise the decoding will happen whenever the lazy *_data
+            properties are accessed.
+        kafka_position_info (Optional[KafkaPositionInfo]): The specified kafka
+            position information.  The kafka_position_info may be constructed
+            from the unpacked yelp_kafka message.
+        reader_schema_id (Optional[int]): Schema id used to decode the incoming
+            kafka message and build data_pipeline.message.Message message.
+            Defaults to None.
+
+    Returns (data_pipeline.message.Message):
+        The message object
+    """
+    return _create_message_from_packed_message(
+        packed_message=message_value,
+        envelope=envelope or Envelope(),
+        force_payload_decoding=force_payload_decoding,
+        kafka_position_info=kafka_position_info,
         reader_schema_id=reader_schema_id
     )
 
@@ -904,10 +943,8 @@ def _create_message_from_packed_message(
     decoding.
 
     Args:
-        packed_message (yelp_kafka.consumer.Message or kafka.common.KafkaMessage):
-            The message info which has the payload, offset, partition,
-            and key of the received message if of type yelp_kafka.consumer.message
-            or just payload, uuid, schema_id in case of kafka.common.Message.
+        packed_message (yelp_kafka.consumer.Message.value or kafka.common.KafkaMessage.value):
+            The value of the kafka message with payload, uuid and schema_id
         force_payload_decoding (boolean): If this is set to `True` then
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
@@ -922,7 +959,7 @@ def _create_message_from_packed_message(
     Returns (data_pipeline.message.Message):
         The message object
     """
-    unpacked_message = envelope.unpack(packed_message.value)
+    unpacked_message = envelope.unpack(packed_message)
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
     message = message_class.create_from_unpacked_message(
         unpacked_message=unpacked_message,
